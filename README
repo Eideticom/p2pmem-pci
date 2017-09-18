@@ -1,0 +1,6 @@
+P2PMEM PCIe Linux Driver
+------------------------
+
+This is a standlone PCIe driver that ties into the p2pmem [1]
+framework. It can be used for any PCIe end-point that simply exposes a
+PCIe BAR.
