@@ -118,7 +118,7 @@ static int __init p2pmem_pci_init(void)
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
-	pr_info("p2pmem: module unloaded\n");
+	pr_info("p2pmem-pci: module unloaded\n");
 }
 
 module_init(p2pmem_pci_init);
