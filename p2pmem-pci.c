@@ -51,6 +51,7 @@ static int init_p2pmem(struct p2pmem_pci_device *p2pmem_pci)
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 
+	dev_info(&pdev->dev, "Adding %pR as a p2pmem resource\n", res);
 	rc = p2pmem_add_resource(p, res);
 	if (rc) {
 		p2pmem_unregister(p);
@@ -80,6 +81,7 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 
 	p2pmem_pci->dev = get_device(&pdev->dev);
 	pci_set_drvdata(pdev, p2pmem_pci);
+
 	init_p2pmem(p2pmem_pci);
 
 	return 0;
