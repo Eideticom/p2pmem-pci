@@ -96,6 +96,7 @@ static void p2pmem_pci_remove(struct pci_dev *pdev)
 {
 	struct p2pmem_pci_device *p2pmem_pci = pci_get_drvdata(pdev);
 	p2pmem_unregister(p2pmem_pci->p2pmem);
+	kfree(p2pmem_pci);
 }
 
 static struct pci_driver p2pmem_pci_driver = {
