@@ -18,6 +18,8 @@
 #include <linux/p2pmem.h>
 #include <linux/pci.h>
 
+#define PCI_VENDOR_EIDETICOM 0x1de5
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Stephen Bates <stephen@eideticom.com");
 MODULE_DESCRIPTION("A P2PMEM driver for simple PCIe End Points (EPs)");
@@ -26,7 +28,7 @@ static uint pci_bar;
 module_param(pci_bar, uint, S_IRUGO);
 
 static struct pci_device_id p2pmem_pci_id_table[] = {
-	{ PCI_DEVICE(0x10ee, 0x0888) },
+	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, p2pmem_pci_id_table);
