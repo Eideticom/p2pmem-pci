@@ -11,6 +11,9 @@ else
  KERNEL_SOURCES	 = /lib/modules/$(KERNEL_UNAME)/build
 endif
 
+default: modules
+.PHONY: default
+
 obj-m += p2pmem-pci.o
 
 %::
