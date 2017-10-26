@@ -13,8 +13,10 @@ endif
 
 obj-m += p2pmem-pci.o
 
-all:
-	make -C $(KERNEL_SOURCES) M=$(PWD) modules
+%::
+	$(MAKE) -C $(KERNEL_SOURCES) M=$$PWD $@
 
-clean:
-	make -C $(KERNEL_SOURCES) M=$(PWD) clean
+p2pmem-pci.ko:
+
+install: modules_install
+.PHONY: install

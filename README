@@ -4,3 +4,17 @@ P2PMEM PCIe Linux Driver
 This is a standlone PCIe driver that ties into the p2pmem [1]
 framework. It can be used for any PCIe end-point that simply exposes a
 PCIe BAR.
+
+Build and Install
+-----------------
+
+To build the module as a .ko for manually installation run:
+
+make
+
+To install the module into the current kernel run:
+
+make install
+
+Note that for this to work you either need to have module signing set
+up or turned off on your machine.
