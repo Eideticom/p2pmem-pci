@@ -14,7 +14,7 @@ endif
 default: modules
 .PHONY: default
 
-obj-m += p2pmem-pci.o
+obj-m += p2pmem_pci.o
 
 %::
 	$(MAKE) -C $(KERNEL_SOURCES) M=$$PWD $@
