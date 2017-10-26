@@ -15,7 +15,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/p2pmem.h>
 #include <linux/pci.h>
 
 #define PCI_VENDOR_EIDETICOM 0x1de5
@@ -27,47 +26,84 @@ MODULE_DESCRIPTION("A P2PMEM driver for simple PCIe End Points (EPs)");
 static uint pci_bar;
 module_param(pci_bar, uint, S_IRUGO);
 
+static struct class *p2pmem_class;
+static DEFINE_IDA(p2pmem_ida);
+
 static struct pci_device_id p2pmem_pci_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, p2pmem_pci_id_table);
 
-struct p2pmem_pci_device {
-	struct device *dev;
-	struct p2pmem_dev *p2pmem;
+struct p2pmem_dev {
+	struct device dev;
+	struct pci_dev *pdev;
+	int id;
 };
 
-/*
- * Copied from https://github.com/sbates130272/linux-p2pmem/\
- * commit/19ea30476314359c7ae22c48434edb4269dda976
- */
-static int init_p2pmem(struct p2pmem_pci_device *p2pmem_pci)
+static struct p2pmem_dev *to_p2pmem(struct device *dev)
+{
+	return container_of(dev, struct p2pmem_dev, dev);
+}
+
+static void p2pmem_release(struct device *dev)
+{
+	struct p2pmem_dev *p = to_p2pmem(dev);
+
+	kfree(p);
+}
+
+static struct p2pmem_dev *p2pmem_create(struct pci_dev *pdev)
 {
 	struct p2pmem_dev *p;
-	int rc;
-	struct pci_dev *pdev = to_pci_dev(p2pmem_pci->dev);
-	struct resource *res = &pdev->resource[pci_bar];
+	int err;
 
-	p = p2pmem_create(&pdev->dev);
-	if (IS_ERR(p))
-		return PTR_ERR(p);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
+	if (!p)
+		return ERR_PTR(-ENOMEM);
 
-	dev_info(&pdev->dev, "Adding %pR as a p2pmem resource\n", res);
-	rc = p2pmem_add_resource(p, res);
-	if (rc) {
-		p2pmem_unregister(p);
-		return rc;
+	p->pdev = pdev;
+
+	device_initialize(&p->dev);
+	p->dev.class = p2pmem_class;
+	p->dev.parent = &pdev->dev;
+	p->dev.release = p2pmem_release;
+
+	p->id = ida_simple_get(&p2pmem_ida, 0, 0, GFP_KERNEL);
+	if (p->id < 0) {
+		err = p->id;
+		goto out_free;
 	}
-	p2pmem_pci->p2pmem = p;
 
-	return 0;
+	dev_set_name(&p->dev, "p2pmem%d", p->id);
+
+	err = device_add(&p->dev);
+	if (err)
+		goto out_ida;
+
+	dev_info(&p->dev, "registered");
+
+	return p;
+
+out_ida:
+	ida_simple_remove(&p2pmem_ida, p->id);
+out_free:
+	kfree(p);
+	return ERR_PTR(err);
+}
+
+void p2pmem_destroy(struct p2pmem_dev *p)
+{
+	dev_info(&p->dev, "unregistered");
+	device_del(&p->dev);
+	ida_simple_remove(&p2pmem_ida, p->id);
+	put_device(&p->dev);
 }
 
 static int p2pmem_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *id)
 {
-	struct p2pmem_pci_device *p2pmem_pci;
+	struct p2pmem_dev *p;
 	int err = 0;
 
 	if (pci_enable_device_mem(pdev) < 0) {
@@ -75,16 +111,12 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out;
 	}
 
-	p2pmem_pci = kzalloc(sizeof(*p2pmem_pci), GFP_KERNEL);
-	if (unlikely(!p2pmem_pci)) {
-		err = -ENOMEM;
+	p = p2pmem_create(pdev);
+	if (IS_ERR(p))
 		goto out_disable_device;
-	}
 
-	p2pmem_pci->dev = get_device(&pdev->dev);
-	pci_set_drvdata(pdev, p2pmem_pci);
-
-	init_p2pmem(p2pmem_pci);
+	pci_set_drvdata(pdev, p);
+	pci_p2pmem_add_resource(pdev, pci_bar, 0);
 
 	return 0;
 
@@ -96,9 +128,9 @@ out:
 
 static void p2pmem_pci_remove(struct pci_dev *pdev)
 {
-	struct p2pmem_pci_device *p2pmem_pci = pci_get_drvdata(pdev);
-	p2pmem_unregister(p2pmem_pci->p2pmem);
-	kfree(p2pmem_pci);
+	struct p2pmem_dev *p = pci_get_drvdata(pdev);
+
+	p2pmem_destroy(p);
 }
 
 static struct pci_driver p2pmem_pci_driver = {
@@ -112,18 +144,27 @@ static int __init p2pmem_pci_init(void)
 {
 	int rc;
 
+	p2pmem_class = class_create(THIS_MODULE, "p2pmem");
+	if (IS_ERR(p2pmem_class))
+		return PTR_ERR(p2pmem_class);
+
 	rc = pci_register_driver(&p2pmem_pci_driver);
 	if (rc)
-		return rc;
+		goto err_class;
 
-	pr_info("p2pmem-pci: module loaded\n");
+	pr_info(KBUILD_MODNAME ": module loaded\n");
+
 	return 0;
+err_class:
+	class_destroy(p2pmem_class);
+	return rc;
 }
 
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
-	pr_info("p2pmem-pci: module unloaded\n");
+	class_destroy(p2pmem_class);
+	pr_info(KBUILD_MODNAME ": module unloaded\n");
 }
 
 module_init(p2pmem_pci_init);
