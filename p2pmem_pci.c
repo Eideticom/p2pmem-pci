@@ -21,6 +21,7 @@
 
 #define PCI_VENDOR_EIDETICOM 0x1de5
 #define PCI_VENDOR_MICROSEMI 0x11f8
+#define PCI_MTRAMON_DEV_ID   0xf117
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Stephen Bates <stephen@eideticom.com");
@@ -36,7 +37,8 @@ static dev_t p2pmem_devt;
 
 static struct pci_device_id p2pmem_pci_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000), .driver_data = 0 },
-	{ PCI_DEVICE(PCI_VENDOR_MICROSEMI, 0xf117), .driver_data = 4 },
+	{ PCI_DEVICE(PCI_VENDOR_MICROSEMI,
+		     PCI_MTRAMON_DEV_ID), .driver_data = 4 },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, p2pmem_pci_id_table);
@@ -46,6 +48,7 @@ struct p2pmem_dev {
 	struct pci_dev *pdev;
 	int id;
 	struct cdev cdev;
+	bool mtramon;
 };
 
 static struct p2pmem_dev *to_p2pmem(struct device *dev)
@@ -290,6 +293,53 @@ static struct pci_driver p2pmem_pci_driver = {
 	.remove = p2pmem_pci_remove,
 };
 
+static void ugly_mtramon_hack_init(void)
+{
+	struct pci_dev *pdev = NULL;
+	struct p2pmem_dev *p;
+	int err;
+
+	while ((pdev = pci_get_device(PCI_VENDOR_MICROSEMI,
+				      PCI_MTRAMON_DEV_ID,
+				      pdev))) {
+		// If there's no driver it can be handled by the regular
+		//  pci driver case
+		if (!pdev->driver)
+			continue;
+
+		p = p2pmem_create(pdev);
+		if (!p)
+			continue;
+
+		p->mtramon = true;
+
+		if (pdev->p2p_pool)
+			continue;
+
+		err = pci_p2pmem_add_resource(pdev, 4, 0);
+		if (err) {
+			dev_err(&pdev->dev, "unable to add p2p resource");
+			p2pmem_destroy(p);
+			continue;
+		}
+	}
+}
+
+static void ugly_mtramon_hack_deinit(void)
+{
+	struct class_dev_iter iter;
+	struct device *dev;
+	struct p2pmem_dev *p;
+
+	class_dev_iter_init(&iter, p2pmem_class, NULL, NULL);
+	while ((dev = class_dev_iter_next(&iter))) {
+		p = to_p2pmem(dev);
+		if (p->mtramon)
+			p2pmem_destroy(p);
+	}
+	class_dev_iter_exit(&iter);
+}
+
 static int __init p2pmem_pci_init(void)
 {
 	int rc;
@@ -301,6 +351,8 @@ static int __init p2pmem_pci_init(void)
 	rc = alloc_chrdev_region(&p2pmem_devt, 0, max_devices, "p2pmem");
 	if (rc)
 		goto err_class;
+
+	ugly_mtramon_hack_init();
 
 	rc = pci_register_driver(&p2pmem_pci_driver);
 	if (rc)
@@ -319,6 +371,7 @@ err_class:
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
+	ugly_mtramon_hack_deinit();
 	unregister_chrdev_region(p2pmem_devt, max_devices);
 	class_destroy(p2pmem_class);
 	pr_info(KBUILD_MODNAME ": module unloaded\n");
