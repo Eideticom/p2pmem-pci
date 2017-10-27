@@ -32,6 +32,8 @@ static int max_devices = 16;
 module_param(max_devices, int, 0444);
 MODULE_PARM_DESC(max_devices, "Maximum number of char devices");
 
+#define MTRAMON_BAR 4
+
 static struct class *p2pmem_class;
 static DEFINE_IDA(p2pmem_ida);
 static dev_t p2pmem_devt;
@@ -39,7 +41,7 @@ static dev_t p2pmem_devt;
 static struct pci_device_id p2pmem_pci_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000), .driver_data = 0 },
 	{ PCI_DEVICE(PCI_VENDOR_MICROSEMI,
-		     PCI_MTRAMON_DEV_ID), .driver_data = 4 },
+		     PCI_MTRAMON_DEV_ID), .driver_data = MTRAMON_BAR },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, p2pmem_pci_id_table);
@@ -196,6 +198,59 @@ static const struct file_operations p2pmem_fops = {
 	.mmap = p2pmem_mmap,
 };
 
+static int p2pmem_test_page_mappings(struct p2pmem_dev *p, int bar)
+{
+	void *addr;
+	int err = 0;
+	struct page *page;
+	resource_size_t bar_addr = pci_resource_start(p->pdev, bar);
+	phys_addr_t pa;
+
+	addr = pci_alloc_p2pmem(p->pdev, PAGE_SIZE);
+	if (!addr)
+		return -ENOMEM;
+
+	page = virt_to_page(addr);
+	if (!is_zone_device_page(page)) {
+		dev_err(&p->dev,
+			"ERROR: kernel virt_to_page does not point to a ZONE_DEVICE page!");
+		err = -EFAULT;
+		goto out;
+	}
+
+	pa = page_to_phys(page);
+	if (pa != bar_addr) {
+		dev_err(&p->dev,
+			"ERROR: page_to_phys does not map to the BAR address!"
+			"  %pa[p] != %pa[p]", &pa, &bar_addr);
+		err = -EFAULT;
+		goto out;
+	}
+
+	pa = virt_to_phys(addr);
+	if (pa != bar_addr) {
+		dev_err(&p->dev,
+			"ERROR: virt_to_phys does not map to the BAR address!"
+			"  %pa[p] != %pa[p]", &pa, &bar_addr);
+		err = -EFAULT;
+		goto out;
+	}
+
+	if (page_to_virt(page) != addr) {
+		dev_err(&p->dev,
+			"ERROR: page_to_virt does not map to the correct address!");
+		err = -EFAULT;
+		goto out;
+	}
+
+out:
+	if (err == 0)
+		dev_info(&p->dev, "kernel page mappings seem sane.");
+
+	pci_free_p2pmem(p->pdev, addr, PAGE_SIZE);
+	return err;
+}
+
 static int p2pmem_test_p2p_access(struct p2pmem_dev *p)
 {
 	u32 *addr;
@@ -220,12 +275,23 @@ static int p2pmem_test_p2p_access(struct p2pmem_dev *p)
 
 out:
 	if (err == 0)
-		dev_info(&p->dev, "GOOD: kernel can access p2p memory.");
+		dev_info(&p->dev, "kernel can access p2p memory.");
 	else
 		dev_err(&p->dev, "ERROR: kernel can't access p2p memory!");
 
 	pci_free_p2pmem(p->pdev, addr, PAGE_SIZE);
 	return err;
+}
+
+static int p2pmem_test(struct p2pmem_dev *p, int bar)
+{
+	int err;
+
+	err = p2pmem_test_page_mappings(p, bar);
+	if (err)
+		return err;
+
+	return p2pmem_test_p2p_access(p);
 }
 
 static void p2pmem_release(struct device *dev)
@@ -269,8 +335,6 @@ static struct p2pmem_dev *p2pmem_create(struct pci_dev *pdev)
 
 	dev_info(&p->dev, "registered");
 
-	p2pmem_test_p2p_access(p);
-
 	return p;
 
 out_ida:
@@ -310,6 +374,7 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out_disable_device;
 
 	pci_set_drvdata(pdev, p);
+	p2pmem_test(p, id->driver_data);
 
 	return 0;
 
@@ -348,7 +413,7 @@ static void ugly_mtramon_hack_init(void)
 			continue;
 
 		if (!pdev->p2p_pool) {
-			err = pci_p2pmem_add_resource(pdev, 4, 0);
+			err = pci_p2pmem_add_resource(pdev, MTRAMON_BAR, 0);
 			if (err) {
 				dev_err(&pdev->dev,
 					"unable to add p2p resource");
@@ -359,6 +424,8 @@ static void ugly_mtramon_hack_init(void)
 		p = p2pmem_create(pdev);
 		if (!p)
 			continue;
+
+		p2pmem_test(p, MTRAMON_BAR);
 
 		p->mtramon = true;
 	}
