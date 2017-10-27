@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/pfn_t.h>
 
@@ -264,12 +265,13 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out;
 	}
 
+	pci_p2pmem_add_resource(pdev, id->driver_data, 0);
+
 	p = p2pmem_create(pdev);
 	if (IS_ERR(p))
 		goto out_disable_device;
 
 	pci_set_drvdata(pdev, p);
-	pci_p2pmem_add_resource(pdev, id->driver_data, 0);
 
 	return 0;
 
@@ -307,21 +309,20 @@ static void ugly_mtramon_hack_init(void)
 		if (!pdev->driver)
 			continue;
 
+		if (!pdev->p2p_pool) {
+			err = pci_p2pmem_add_resource(pdev, 4, 0);
+			if (err) {
+				dev_err(&pdev->dev,
+					"unable to add p2p resource");
+				continue;
+			}
+		}
+
 		p = p2pmem_create(pdev);
 		if (!p)
 			continue;
 
 		p->mtramon = true;
-
-		if (pdev->p2p_pool)
-			continue;
-
-		err = pci_p2pmem_add_resource(pdev, 4, 0);
-		if (err) {
-			dev_err(&pdev->dev, "unable to add p2p resource");
-			p2pmem_destroy(p);
-			continue;
-		}
 	}
 }
 
