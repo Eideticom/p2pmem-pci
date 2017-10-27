@@ -196,6 +196,38 @@ static const struct file_operations p2pmem_fops = {
 	.mmap = p2pmem_mmap,
 };
 
+static int p2pmem_test_p2p_access(struct p2pmem_dev *p)
+{
+	u32 *addr;
+	const u32 test_value = 0x11223344;
+	int err = 0;
+
+	addr = pci_alloc_p2pmem(p->pdev, PAGE_SIZE);
+	if (!addr)
+		return -ENOMEM;
+
+	WRITE_ONCE(addr[0], 0);
+	if (READ_ONCE(addr[0]) != 0) {
+		err = -EFAULT;
+		goto out;
+	}
+
+	WRITE_ONCE(addr[0], test_value);
+	if (READ_ONCE(addr[0]) != test_value) {
+		err = -EFAULT;
+		goto out;
+	}
+
+out:
+	if (err == 0)
+		dev_info(&p->dev, "GOOD: kernel can access p2p memory.");
+	else
+		dev_err(&p->dev, "ERROR: kernel can't access p2p memory!");
+
+	pci_free_p2pmem(p->pdev, addr, PAGE_SIZE);
+	return err;
+}
+
 static void p2pmem_release(struct device *dev)
 {
 	struct p2pmem_dev *p = to_p2pmem(dev);
@@ -236,6 +268,8 @@ static struct p2pmem_dev *p2pmem_create(struct pci_dev *pdev)
 		goto out_ida;
 
 	dev_info(&p->dev, "registered");
+
+	p2pmem_test_p2p_access(p);
 
 	return p;
 
