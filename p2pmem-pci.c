@@ -17,6 +17,8 @@
 #include <linux/module.h>
 #include <linux/p2pmem.h>
 #include <linux/pci.h>
+#include <linux/genalloc.h>
+#include <linux/random.h>
 
 #define PCI_VENDOR_EIDETICOM 0x1de5
 
@@ -26,6 +28,9 @@ MODULE_DESCRIPTION("A P2PMEM driver for simple PCIe End Points (EPs)");
 
 static uint pci_bar;
 module_param(pci_bar, uint, S_IRUGO);
+
+static uint random_alloc;
+module_param(random_alloc, uint, S_IRUGO);
 
 static struct pci_device_id p2pmem_pci_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000) },
@@ -37,6 +42,30 @@ struct p2pmem_pci_device {
 	struct device *dev;
 	struct p2pmem_dev *p2pmem;
 };
+
+#define RANDOM_ATTEMPTS 100
+
+unsigned long gen_pool_random_fit(unsigned long *map, unsigned long size,
+		unsigned long start, unsigned int nr, void *data,
+		struct gen_pool *pool)
+{
+	unsigned attempts = 0;
+	unsigned long addr;
+
+	while (attempts < RANDOM_ATTEMPTS)
+	{
+		addr = get_random_long() % (size - nr);
+		addr = bitmap_find_next_zero_area(map, size, addr, nr, 0);
+		if (addr >= (size - nr)) {
+			attempts++;
+			continue;
+		}
+		return addr;
+	}
+	WARN(attempts == RANDOM_ATTEMPTS,
+	     "ran out of random attempts.\n");
+	return 0;
+}
 
 /*
  * Copied from https://github.com/sbates130272/linux-p2pmem/\
@@ -60,6 +89,13 @@ static int init_p2pmem(struct p2pmem_pci_device *p2pmem_pci)
 		return rc;
 	}
 	p2pmem_pci->p2pmem = p;
+
+	if (random_alloc) {
+		dev_info(&pdev->dev, "Assigning random allocator to p2pmem\n");
+		gen_pool_set_algo(p2pmem_pci->p2pmem->pool,
+				  (genpool_algo_t) gen_pool_random_fit,
+				  NULL);
+	}
 
 	return 0;
 }
