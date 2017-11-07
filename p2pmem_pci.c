@@ -363,7 +363,7 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out;
 	}
 
-	err = pci_p2pmem_add_resource(pdev, id->driver_data, 0);
+	err = pci_p2pmem_add_resource(pdev, id->driver_data, 0, 0);
 	if (err) {
 		dev_err(&pdev->dev, "unable to add p2p resource");
 		goto out_disable_device;
