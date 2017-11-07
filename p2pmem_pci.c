@@ -198,12 +198,13 @@ static const struct file_operations p2pmem_fops = {
 	.mmap = p2pmem_mmap,
 };
 
-static int p2pmem_test_page_mappings(struct p2pmem_dev *p, int bar)
+static int p2pmem_test_page_mappings(struct p2pmem_dev *p)
 {
 	void *addr;
 	int err = 0;
 	struct page *page;
-	resource_size_t bar_addr = pci_resource_start(p->pdev, bar);
+	struct pci_bus_region bus_region;
+	struct resource res;
 	phys_addr_t pa;
 
 	addr = pci_alloc_p2pmem(p->pdev, PAGE_SIZE);
@@ -218,20 +219,25 @@ static int p2pmem_test_page_mappings(struct p2pmem_dev *p, int bar)
 		goto out;
 	}
 
+	bus_region.start = pci_p2pmem_virt_to_bus(p->pdev, addr);
+	bus_region.end = bus_region.start + PAGE_SIZE;
+
+	pcibios_bus_to_resource(p->pdev->bus, &res, &bus_region);
+
 	pa = page_to_phys(page);
-	if (pa != bar_addr) {
+	if (pa != res.start) {
 		dev_err(&p->dev,
 			"ERROR: page_to_phys does not map to the BAR address!"
-			"  %pa[p] != %pa[p]", &pa, &bar_addr);
+			"  %pa[p] != %pa[p]", &pa, &res.start);
 		err = -EFAULT;
 		goto out;
 	}
 
 	pa = virt_to_phys(addr);
-	if (pa != bar_addr) {
+	if (pa != res.start) {
 		dev_err(&p->dev,
 			"ERROR: virt_to_phys does not map to the BAR address!"
-			"  %pa[p] != %pa[p]", &pa, &bar_addr);
+			"  %pa[p] != %pa[p]", &pa, &res.start);
 		err = -EFAULT;
 		goto out;
 	}
@@ -283,11 +289,11 @@ out:
 	return err;
 }
 
-static int p2pmem_test(struct p2pmem_dev *p, int bar)
+static int p2pmem_test(struct p2pmem_dev *p)
 {
 	int err;
 
-	err = p2pmem_test_page_mappings(p, bar);
+	err = p2pmem_test_page_mappings(p);
 	if (err)
 		return err;
 
@@ -335,6 +341,8 @@ static struct p2pmem_dev *p2pmem_create(struct pci_dev *pdev)
 
 	dev_info(&p->dev, "registered");
 
+	p2pmem_test(p);
+
 	return p;
 
 out_ida:
@@ -376,7 +384,6 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out_disable_device;
 
 	pci_set_drvdata(pdev, p);
-	p2pmem_test(p, id->driver_data);
 
 	return 0;
 
@@ -430,8 +437,6 @@ static void ugly_mtramon_hack_init(void)
 		p = p2pmem_create(pdev);
 		if (!p)
 			continue;
-
-		p2pmem_test(p, MTRAMON_BAR);
 
 		p->mtramon = true;
 	}
