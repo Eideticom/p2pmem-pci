@@ -452,7 +452,7 @@ static int __init p2pmem_pci_init(void)
 {
 	int rc;
 
-	p2pmem_class = class_create(THIS_MODULE, "p2pmem");
+	p2pmem_class = class_create(THIS_MODULE, "p2pmem_device");
 	if (IS_ERR(p2pmem_class))
 		return PTR_ERR(p2pmem_class);
 
