@@ -414,6 +414,10 @@ static void ugly_mtramon_hack_init(void)
 		if (!pdev->driver)
 			continue;
 
+		// The NVME driver already handled it
+		if (pdev->p2p_pool)
+			continue;
+
 		if (!pdev->p2p_pool) {
 			err = pci_p2pmem_add_resource(pdev, MTRAMON_BAR, 0, 0);
 			if (err) {
