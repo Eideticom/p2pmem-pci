@@ -369,6 +369,8 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out_disable_device;
 	}
 
+	pci_p2pmem_publish(pdev, true);
+
 	p = p2pmem_create(pdev);
 	if (IS_ERR(p))
 		goto out_disable_device;
@@ -413,7 +415,7 @@ static void ugly_mtramon_hack_init(void)
 			continue;
 
 		if (!pdev->p2p_pool) {
-			err = pci_p2pmem_add_resource(pdev, MTRAMON_BAR, 0);
+			err = pci_p2pmem_add_resource(pdev, MTRAMON_BAR, 0, 0);
 			if (err) {
 				dev_err(&pdev->dev,
 					"unable to add p2p resource");
