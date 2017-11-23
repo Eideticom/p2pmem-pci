@@ -51,7 +51,7 @@ struct p2pmem_dev {
 	struct pci_dev *pdev;
 	int id;
 	struct cdev cdev;
-	bool mtramon;
+	bool created_by_hack;
 };
 
 static struct p2pmem_dev *to_p2pmem(struct device *dev)
@@ -438,11 +438,28 @@ static void ugly_mtramon_hack_init(void)
 		if (!p)
 			continue;
 
-		p->mtramon = true;
+		p->created_by_hack = true;
 	}
 }
 
-static void ugly_mtramon_hack_deinit(void)
+static void ugly_hack_to_create_p2pmem_devs_for_other_devices(void)
+{
+	struct pci_dev *pdev = NULL;
+	struct p2pmem_dev *p;
+
+	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
+		if (!pdev->p2p_pool)
+			continue;
+
+		p = p2pmem_create(pdev);
+		if (!p)
+			continue;
+
+		p->created_by_hack = true;
+	}
+}
+
+static void ugly_hack_deinit(void)
 {
 	struct class_dev_iter iter;
 	struct device *dev;
@@ -451,7 +468,7 @@ static void ugly_mtramon_hack_deinit(void)
 	class_dev_iter_init(&iter, p2pmem_class, NULL, NULL);
 	while ((dev = class_dev_iter_next(&iter))) {
 		p = to_p2pmem(dev);
-		if (p->mtramon)
+		if (p->created_by_hack)
 			p2pmem_destroy(p);
 	}
 	class_dev_iter_exit(&iter);
@@ -469,6 +486,7 @@ static int __init p2pmem_pci_init(void)
 	if (rc)
 		goto err_class;
 
+	ugly_hack_to_create_p2pmem_devs_for_other_devices();
 	ugly_mtramon_hack_init();
 
 	rc = pci_register_driver(&p2pmem_pci_driver);
@@ -488,7 +506,7 @@ err_class:
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
-	ugly_mtramon_hack_deinit();
+	ugly_hack_deinit();
 	unregister_chrdev_region(p2pmem_devt, max_devices);
 	class_destroy(p2pmem_class);
 	pr_info(KBUILD_MODNAME ": module unloaded\n");
