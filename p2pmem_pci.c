@@ -32,6 +32,10 @@ static int max_devices = 16;
 module_param(max_devices, int, 0444);
 MODULE_PARM_DESC(max_devices, "Maximum number of char devices");
 
+static int ugly_hack_en;
+module_param(ugly_hack_en, int, 0444);
+MODULE_PARM_DESC(ugly_hack_en, "Enable ugly hack");
+
 #define MTRAMON_BAR 4
 
 static struct class *p2pmem_class;
@@ -486,8 +490,10 @@ static int __init p2pmem_pci_init(void)
 	if (rc)
 		goto err_class;
 
-	ugly_hack_to_create_p2pmem_devs_for_other_devices();
-	ugly_mtramon_hack_init();
+	if (ugly_hack_en) {
+		ugly_hack_to_create_p2pmem_devs_for_other_devices();
+		ugly_mtramon_hack_init();
+	}
 
 	rc = pci_register_driver(&p2pmem_pci_driver);
 	if (rc)
@@ -506,7 +512,8 @@ err_class:
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
-	ugly_hack_deinit();
+	if (ugly_hack_en)
+		ugly_hack_deinit();
 	unregister_chrdev_region(p2pmem_devt, max_devices);
 	class_destroy(p2pmem_class);
 	pr_info(KBUILD_MODNAME ": module unloaded\n");
