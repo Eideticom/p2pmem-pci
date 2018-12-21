@@ -17,4 +17,5 @@ To install the module into the current kernel run:
 make install
 
 Note that for this to work you either need to have module signing set
-up or turned off on your machine.
+up or turned off on your machine. Also this code will only work for
+>=4.20.x kernels. Refer to other branches for other kernel versions.

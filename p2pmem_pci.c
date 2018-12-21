@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/pci-p2pdma.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/pfn_t.h>
@@ -31,10 +32,6 @@ MODULE_DESCRIPTION("A P2PMEM driver for simple PCIe End Points (EPs)");
 static int max_devices = 16;
 module_param(max_devices, int, 0444);
 MODULE_PARM_DESC(max_devices, "Maximum number of char devices");
-
-static int ugly_hack_en;
-module_param(ugly_hack_en, int, 0444);
-MODULE_PARM_DESC(ugly_hack_en, "Enable ugly hack");
 
 #define MTRAMON_BAR 4
 
@@ -112,13 +109,13 @@ static void p2pmem_vma_close(struct vm_area_struct *vma)
 	kfree(pv);
 }
 
-static int p2pmem_vma_fault(struct vm_fault *vmf)
+static vm_fault_t p2pmem_vma_fault(struct vm_fault *vmf)
 {
 	struct p2pmem_vma *pv = vmf->vma->vm_private_data;
 	unsigned int pg_idx;
 	struct page *pg;
 	pfn_t pfn;
-	int rc;
+	vm_fault_t rc;
 
 	pg_idx = (vmf->address - vmf->vma->vm_start) / PAGE_SIZE;
 
@@ -138,16 +135,11 @@ static int p2pmem_vma_fault(struct vm_fault *vmf)
 	pv->used_pages[pg_idx] = pg;
 
 	pfn = phys_to_pfn_t(page_to_phys(pg), PFN_DEV | PFN_MAP);
-	rc = vm_insert_mixed(vmf->vma, vmf->address, pfn);
+	rc = vmf_insert_mixed(vmf->vma, vmf->address, pfn);
 
 	mutex_unlock(&pv->mutex);
 
-	if (rc == -ENOMEM)
-		return VM_FAULT_OOM;
-	if (rc < 0 && rc != -EBUSY)
-		return VM_FAULT_SIGBUS;
-
-	return VM_FAULT_NOPAGE;
+	return rc;
 }
 
 const struct vm_operations_struct p2pmem_vmops = {
@@ -375,7 +367,7 @@ static int p2pmem_pci_probe(struct pci_dev *pdev,
 		goto out;
 	}
 
-	err = pci_p2pmem_add_resource(pdev, id->driver_data, 0, 0);
+	err = pci_p2pdma_add_resource(pdev, id->driver_data, 0, 0);
 	if (err) {
 		dev_err(&pdev->dev, "unable to add p2p resource");
 		goto out_disable_device;
@@ -426,11 +418,11 @@ static void ugly_mtramon_hack_init(void)
 			continue;
 
 		// The NVME driver already handled it
-		if (pdev->p2p_pool)
+		if (pdev->p2pdma)
 			continue;
 
-		if (!pdev->p2p_pool) {
-			err = pci_p2pmem_add_resource(pdev, MTRAMON_BAR, 0, 0);
+		if (!pdev->p2pdma) {
+			err = pci_p2pdma_add_resource(pdev, MTRAMON_BAR, 0, 0);
 			if (err) {
 				dev_err(&pdev->dev,
 					"unable to add p2p resource");
@@ -452,7 +444,7 @@ static void ugly_hack_to_create_p2pmem_devs_for_other_devices(void)
 	struct p2pmem_dev *p;
 
 	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
-		if (!pdev->p2p_pool)
+		if (!pdev->p2pdma)
 			continue;
 
 		p = p2pmem_create(pdev);
@@ -490,10 +482,8 @@ static int __init p2pmem_pci_init(void)
 	if (rc)
 		goto err_class;
 
-	if (ugly_hack_en) {
-		ugly_hack_to_create_p2pmem_devs_for_other_devices();
-		ugly_mtramon_hack_init();
-	}
+	ugly_hack_to_create_p2pmem_devs_for_other_devices();
+	ugly_mtramon_hack_init();
 
 	rc = pci_register_driver(&p2pmem_pci_driver);
 	if (rc)
@@ -512,8 +502,7 @@ err_class:
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
-	if (ugly_hack_en)
-		ugly_hack_deinit();
+	ugly_hack_deinit();
 	unregister_chrdev_region(p2pmem_devt, max_devices);
 	class_destroy(p2pmem_class);
 	pr_info(KBUILD_MODNAME ": module unloaded\n");
