@@ -91,7 +91,7 @@ static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
 	{
 		addr = p->pdev->resource[4].start + (vma->vm_pgoff + i) * PAGE_SIZE;
 		pfn = phys_to_pfn_t(addr, PFN_DEV | PFN_MAP);
-		rc = vmf_insert_mixed(vma, vma->vm_start + i * PAGE_SIZE, pfn);
+		rc = vmf_insert_mixed(vma, vma->vm_start + (vma->vm_pgoff + i) * PAGE_SIZE, pfn);
 		if (rc) {
 			return rc;
 		}
