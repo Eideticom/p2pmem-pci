@@ -79,6 +79,7 @@ static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
 	pfn_t pfn;
 	vm_fault_t rc;
 	unsigned long addr;
+    dev_warn(&p->dev, "Mapping with offset 0x%lx", vma->vm_pgoff);
 
 	if ((vma->vm_flags & VM_MAYSHARE) != VM_MAYSHARE) {
 		dev_warn(&p->dev, "mmap failed: can't create private mapping\n");
@@ -92,7 +93,11 @@ static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
 	{
 		addr = p->pdev->resource[4].start + (vma->vm_pgoff + i) * PAGE_SIZE;
 		pfn = phys_to_pfn_t(addr, PFN_DEV | PFN_MAP);
-		rc = vmf_insert_mixed(vma, vma->vm_start + (vma->vm_pgoff + i) * PAGE_SIZE, pfn);
+		rc = vmf_insert_mixed(vma, vma->vm_start + (i) * PAGE_SIZE, pfn);
+        if (rc != VM_FAULT_NOPAGE) {
+            dev_err(&p->dev, "page insert failed with rc 0x%x", rc);
+            return -ENOMEM;
+        }
 	}
 
 	return 0;
