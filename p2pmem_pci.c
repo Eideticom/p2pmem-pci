@@ -23,6 +23,7 @@
 
 #define PCI_VENDOR_EIDETICOM 0x1de5
 #define PCI_VENDOR_MICROSEMI 0x11f8
+#define DEBUG
 #define PCI_MTRAMON_DEV_ID   0xf117
 
 MODULE_LICENSE("GPL");
@@ -92,9 +93,6 @@ static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
 		addr = p->pdev->resource[4].start + (vma->vm_pgoff + i) * PAGE_SIZE;
 		pfn = phys_to_pfn_t(addr, PFN_DEV | PFN_MAP);
 		rc = vmf_insert_mixed(vma, vma->vm_start + (vma->vm_pgoff + i) * PAGE_SIZE, pfn);
-		if (rc) {
-			return rc;
-		}
 	}
 
 	return 0;
