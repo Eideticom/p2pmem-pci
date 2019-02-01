@@ -79,7 +79,6 @@ static int p2pmem_mmap(struct file *filp, struct vm_area_struct *vma)
 	pfn_t pfn;
 	vm_fault_t rc;
 	unsigned long addr;
-    dev_warn(&p->dev, "Mapping with offset 0x%lx", vma->vm_pgoff);
 
 	if ((vma->vm_flags & VM_MAYSHARE) != VM_MAYSHARE) {
 		dev_warn(&p->dev, "mmap failed: can't create private mapping\n");
