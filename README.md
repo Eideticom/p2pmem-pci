@@ -35,6 +35,26 @@ up or turned off on your machine. Also this code will only work for >=
 4.20.x kernels. Please look for the largest tag that is less than or
 equal to your kernel version and use that tag.
 
+Often you don't want to compile against the kernel installed on your
+host so you can use the instructions [here][3] that describe how to
+prepare a kernel tree for out-of-tree module compilation. The
+following process seems to work well (in the top level kernel source
+folder):
+
+1. ```make distclean```.
+2. Setup your .config (don't forget you will need p2pdma enabled).
+3. ```make modules_prepare```.
+
+You can now go back to your p2pmem-pci repo and run the make command
+as noted previously. Note you *might* get the following warning when
+you build the module.
+
+```
+WARNING: Symbol version dump ./Module.symvers
+is missing; modules will have no dependencies and modversions.
+```
+This behaviour is [expected][3].
+
 ## Usage
 
 Once this module has been inserted you should see a /dev/p2pmemX for
@@ -44,10 +64,11 @@ associated with /dev/p2pmemX. You can then pass these pointers into
 library functions like write() and read() *as long as you use
 O_DIRECT*.
 
-An example of how to use /dev/p2pmemX is via [p2pmem-test][3] which
+An example of how to use /dev/p2pmemX is via [p2pmem-test][4] which
 also has more information on setting up p2pdma enabled kernels and a
 p2pdma capable system.
 
 [1]: https://www.kernel.org/doc/html/latest/driver-api/pci/p2pdma.html
 [2]: https://www.flashmemorysummit.com/English/Collaterals/Proceedings/2018/20180809_NVMF-301-1_Maier.pdf
-[3]: https://github.com/sbates130272/p2pmem-test
+[3]: https://www.kernel.org/doc/Documentation/kbuild/modules.txt
+[4]: https://github.com/sbates130272/p2pmem-test
