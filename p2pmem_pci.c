@@ -508,5 +508,5 @@ static void __exit p2pmem_pci_cleanup(void)
 	pr_info(KBUILD_MODNAME ": module unloaded\n");
 }
 
-module_init(p2pmem_pci_init);
+late_initcall(p2pmem_pci_init);
 module_exit(p2pmem_pci_cleanup);
