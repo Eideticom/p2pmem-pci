@@ -1,0 +1,32 @@
+name: reviewdog
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  shellcheck:
+    name: runner / shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: shellcheck
+        uses: reviewdog/action-shellcheck@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-review
+          pattern: "*"
+          exclude: "./*.*"
+  misspell:
+    name: runner / misspell
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code.
+        uses: actions/checkout@v1
+      - name: misspell
+        uses: reviewdog/action-misspell@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          locale: "CA"
