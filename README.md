@@ -45,9 +45,9 @@ folder):
 2. Setup your .config (don't forget you will need p2pdma enabled).
 3. ```make modules_prepare```.
 
-You can now go back to your p2pmem-pci repo and run the make command
-as noted previously. Note you *might* get the following warning when
-you build the module.
+You can now go back to your p2pmem-pci repository and run the make
+command as noted previously. Note you *might* get the following
+warning when you build the module.
 
 ```
 WARNING: Symbol version dump ./Module.symvers
