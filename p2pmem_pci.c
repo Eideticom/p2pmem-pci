@@ -22,8 +22,6 @@
 #include <linux/pfn_t.h>
 
 #define PCI_VENDOR_EIDETICOM 0x1de5
-#define PCI_VENDOR_MICROSEMI 0x11f8
-#define PCI_MTRAMON_DEV_ID   0xf117
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Stephen Bates <stephen@eideticom.com");
@@ -33,16 +31,12 @@ static int max_devices = 16;
 module_param(max_devices, int, 0444);
 MODULE_PARM_DESC(max_devices, "Maximum number of char devices");
 
-#define MTRAMON_BAR 4
-
 static struct class *p2pmem_class;
 static DEFINE_IDA(p2pmem_ida);
 static dev_t p2pmem_devt;
 
 static struct pci_device_id p2pmem_pci_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000), .driver_data = 0 },
-	{ PCI_DEVICE(PCI_VENDOR_MICROSEMI,
-		     PCI_MTRAMON_DEV_ID), .driver_data = MTRAMON_BAR },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, p2pmem_pci_id_table);
@@ -52,7 +46,6 @@ struct p2pmem_dev {
 	struct pci_dev *pdev;
 	int id;
 	struct cdev cdev;
-	bool created_by_hack;
 };
 
 static struct p2pmem_dev *to_p2pmem(struct device *dev)
@@ -403,73 +396,6 @@ static struct pci_driver p2pmem_pci_driver = {
 	.remove = p2pmem_pci_remove,
 };
 
-static void ugly_mtramon_hack_init(void)
-{
-	struct pci_dev *pdev = NULL;
-	struct p2pmem_dev *p;
-	int err;
-
-	while ((pdev = pci_get_device(PCI_VENDOR_MICROSEMI,
-				      PCI_MTRAMON_DEV_ID,
-				      pdev))) {
-		// If there's no driver it can be handled by the regular
-		//  pci driver case
-		if (!pdev->driver)
-			continue;
-
-		// The NVME driver already handled it
-		if (pdev->p2pdma)
-			continue;
-
-		if (!pdev->p2pdma) {
-			err = pci_p2pdma_add_resource(pdev, MTRAMON_BAR, 0, 0);
-			if (err) {
-				dev_err(&pdev->dev,
-					"unable to add p2p resource");
-				continue;
-			}
-		}
-
-		p = p2pmem_create(pdev);
-		if (!p)
-			continue;
-
-		p->created_by_hack = true;
-	}
-}
-
-static void ugly_hack_to_create_p2pmem_devs_for_other_devices(void)
-{
-	struct pci_dev *pdev = NULL;
-	struct p2pmem_dev *p;
-
-	while ((pdev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
-		if (!pdev->p2pdma)
-			continue;
-
-		p = p2pmem_create(pdev);
-		if (!p)
-			continue;
-
-		p->created_by_hack = true;
-	}
-}
-
-static void ugly_hack_deinit(void)
-{
-	struct class_dev_iter iter;
-	struct device *dev;
-	struct p2pmem_dev *p;
-
-	class_dev_iter_init(&iter, p2pmem_class, NULL, NULL);
-	while ((dev = class_dev_iter_next(&iter))) {
-		p = to_p2pmem(dev);
-		if (p->created_by_hack)
-			p2pmem_destroy(p);
-	}
-	class_dev_iter_exit(&iter);
-}
-
 static int __init p2pmem_pci_init(void)
 {
 	int rc;
@@ -481,9 +407,6 @@ static int __init p2pmem_pci_init(void)
 	rc = alloc_chrdev_region(&p2pmem_devt, 0, max_devices, "p2pmem");
 	if (rc)
 		goto err_class;
-
-	ugly_hack_to_create_p2pmem_devs_for_other_devices();
-	ugly_mtramon_hack_init();
 
 	rc = pci_register_driver(&p2pmem_pci_driver);
 	if (rc)
@@ -502,7 +425,6 @@ err_class:
 static void __exit p2pmem_pci_cleanup(void)
 {
 	pci_unregister_driver(&p2pmem_pci_driver);
-	ugly_hack_deinit();
 	unregister_chrdev_region(p2pmem_devt, max_devices);
 	class_destroy(p2pmem_class);
 	pr_info(KBUILD_MODNAME ": module unloaded\n");
