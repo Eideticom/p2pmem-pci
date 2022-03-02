@@ -1,6 +1,7 @@
 li
 ol
 
+Eideticom
 CMBs
 Collaterals
 KDIR
@@ -9,6 +10,7 @@ NVM
 NVMF
 PCIe
 PMEM
+IOMEM
 
 api
 config
