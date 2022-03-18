@@ -61,7 +61,7 @@ static int p2pmem_open(struct inode *inode, struct file *filp)
 
 	p = container_of(inode->i_cdev, struct p2pmem_dev, cdev);
 	filp->private_data = p;
-	pci_p2pdma_file_open(p->pdev, filp);
+	//pci_p2pdma_file_open(p->pdev, filp);
 
 	return 0;
 }
