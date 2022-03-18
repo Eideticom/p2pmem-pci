@@ -22,10 +22,11 @@
 #include <linux/pfn_t.h>
 
 #define PCI_VENDOR_EIDETICOM 0x1de5
+#define PCI_DEVICE_IOMEM 0x1000
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Stephen Bates <stephen@eideticom.com");
-MODULE_DESCRIPTION("A P2PMEM driver for simple PCIe End Points (EPs)");
+MODULE_AUTHOR("Andrew Maier <andrew.maier@eideticom.com>");
+MODULE_DESCRIPTION("A P2PMEM driver for simple PCIe End Points (EPs) to allow mmap into userspace");
 
 static int max_devices = 16;
 module_param(max_devices, int, 0444);
@@ -36,7 +37,8 @@ static DEFINE_IDA(p2pmem_ida);
 static dev_t p2pmem_devt;
 
 static struct pci_device_id p2pmem_pci_id_table[] = {
-	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, 0x1000), .driver_data = 0 },
+	{ PCI_DEVICE(PCI_VENDOR_EIDETICOM, PCI_DEVICE_IOMEM),
+		.driver_data = 0 },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, p2pmem_pci_id_table);
